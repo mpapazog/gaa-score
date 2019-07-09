@@ -1,4 +1,4 @@
-// GameStateController.js
+// GameController.js
 
 var express = require('express');
 var router = express.Router();
@@ -22,24 +22,27 @@ router.get('/', function (req, res) {
 
 // Starts a new game
 router.post('/', function (req, res) {
-    try 
-    {
-        /*
-        move this to graphics class
+    try {
+        var homeTeamName    = null,
+            homeTeamColour  = null,
+            awayTeamName    = null,
+            awayTeamColour  = null;
         
-        var homeTeamName = "HOME";
-        var awayTeamName = "AWAY";
         if (typeof req.body.homeTeamName === "string") {
-            homeTeamName = req.body.homeTeamName;       
+            var homeTeamName = req.body.homeTeamName;       
+        }
+        if (typeof req.body.homeTeamColour === "string") {
+            var homeTeamColour = req.body.homeTeamColour;       
         }
         if (typeof req.body.awayTeamName === "string") {
-            awayTeamName = req.body.awayTeamName;       
+            var awayTeamName = req.body.awayTeamName;       
         }
-        */
-        var state = Game.resetGame();
+        if (typeof req.body.awayTeamColour === "string") {
+            var awayTeamColour = req.body.awayTeamColour;       
+        }
+        var state = Game.resetGame(homeTeamName, homeTeamColour, awayTeamName, awayTeamColour);
     } 
-    catch(err)
-    {
+    catch(err) {
         res.status(500).json({errors:"Server error POST /game"});          
     }
     res.status(200).json(state);     
@@ -47,7 +50,30 @@ router.post('/', function (req, res) {
 
 // Updates game parameters
 router.put('/', function (req, res) {
-    res.end(json({message: "Update game not implemented yet"}));
+    try {
+        var homeTeamName    = null,
+            homeTeamColour  = null,
+            awayTeamName    = null,
+            awayTeamColour  = null;
+        
+        if (typeof req.body.homeTeamName === "string") {
+            var homeTeamName = req.body.homeTeamName;       
+        }
+        if (typeof req.body.homeTeamColour === "string") {
+            var homeTeamColour = req.body.homeTeamColour;       
+        }
+        if (typeof req.body.awayTeamName === "string") {
+            var awayTeamName = req.body.awayTeamName;       
+        }
+        if (typeof req.body.awayTeamColour === "string") {
+            var awayTeamColour = req.body.awayTeamColour;       
+        }
+        var state = Game.updateGame(homeTeamName, homeTeamColour, awayTeamName, awayTeamColour);
+    } 
+    catch(err) {
+        res.status(500).json({errors:"Server error PUT /game"});          
+    }
+    res.status(200).json(state); 
 });
 
 // Resets the clock
@@ -59,18 +85,18 @@ router.post('/clock', function (req, res) {
         var clock = Game.resetPeriodClock(seconds);        
     }
     catch(err) {
-        res.status(500).json({errors:"Server error POST /clock"});         
+        res.status(500).json({errors:"Server error POST /game/clock"});         
     }
     res.status(200).json(clock);
 });
 
-// Starts the clock
+// Starts/stops/updates the clock
 router.put('/clock', function (req, res) {
     try {
-        var clock = Game.startPeriodClock();        
+        var clock = Game.updatePeriodClock(null, null);        
     }
     catch(err) {
-        res.status(500).json({errors:"Server error PUT /clock"});         
+        res.status(500).json({errors:"Server error PUT /game/clock"});         
     }
     res.status(200).json(clock);
 });
@@ -81,7 +107,7 @@ router.delete('/clock', function (req, res) {
         var clock = Game.stopPeriodClock();       
     }
     catch(err) {
-        res.status(500).json({errors:"Server error DELETE /clock"});         
+        res.status(500).json({errors:"Server error DELETE /game/clock"});         
     }
     res.status(200).json(clock);
 });
@@ -95,7 +121,7 @@ router.get('/score', function (req, res) {
         var score = Game.getScore(team);       
     }
     catch(err) {
-        res.status(500).json({errors:"Server error GET /score"});         
+        res.status(500).json({errors:"Server error GET /game/score"});         
     }
     res.status(200).json(score);
 });
@@ -124,7 +150,7 @@ router.put('/score', function (req, res) {
         var score = Game.updateScore(team, scoreType, changeMethod, amount);       
     }
     catch(err) {
-        res.status(500).json({errors:"Server error PUT /score"});         
+        res.status(500).json({errors:"Server error PUT /game/score"});         
     }
     res.status(200).json(score);
 });
