@@ -11,7 +11,7 @@ var Game = require('./Game');
 router.get('/', function (req, res) {
     try 
     {
-        var state = Game.getState();        
+        var state = Game.get();        
     } 
     catch(err)
     {
@@ -48,26 +48,33 @@ router.post('/', function (req, res) {
     res.status(200).json(state);     
 });
 
-// Updates game parameters
-router.put('/', function (req, res) {
+// Updates teams' parameters
+router.put('/teams', function (req, res) {
     try {
         var homeTeamName    = null,
             homeTeamColour  = null,
             awayTeamName    = null,
             awayTeamColour  = null;
         
-        if (typeof req.body.homeTeamName === "string") {
-            var homeTeamName = req.body.homeTeamName;       
+        
+        if (typeof req.body.home === "object") {
+            if (typeof req.body.home.name === "string") {
+                var homeTeamName = req.body.home.name;       
+            }
+            if (typeof req.body.home.colour === "string") {
+                var homeTeamColour = req.body.home.colour;       
+            }                
         }
-        if (typeof req.body.homeTeamColour === "string") {
-            var homeTeamColour = req.body.homeTeamColour;       
+        
+        if (typeof req.body.away === "object") {
+            if (typeof req.body.away.name === "string") {
+                var awayTeamName = req.body.away.name;       
+            }
+            if (typeof req.body.away.colour === "string") {
+                var awayTeamColour = req.body.away.colour;       
+            }                
         }
-        if (typeof req.body.awayTeamName === "string") {
-            var awayTeamName = req.body.awayTeamName;       
-        }
-        if (typeof req.body.awayTeamColour === "string") {
-            var awayTeamColour = req.body.awayTeamColour;       
-        }
+        
         var state = Game.updateGame(homeTeamName, homeTeamColour, awayTeamName, awayTeamColour);
     } 
     catch(err) {
@@ -76,13 +83,10 @@ router.put('/', function (req, res) {
     res.status(200).json(state); 
 });
 
-// Resets the clock
+// Starts the clock
 router.post('/clock', function (req, res) {
-    if (typeof req.body.seconds === "number") {
-        var seconds = req.body.seconds;       
-    }
     try {
-        var clock = Game.resetPeriodClock(seconds);        
+        var clock = Game.updatePeriodClock(null, null, true);        
     }
     catch(err) {
         res.status(500).json({errors:"Server error POST /game/clock"});         
@@ -90,10 +94,23 @@ router.post('/clock', function (req, res) {
     res.status(200).json(clock);
 });
 
-// Starts/stops/updates the clock
+// Updates the clock
 router.put('/clock', function (req, res) {
+    var startTimeSec = null,
+        maxTimeSec   = null,
+        running      = null;
+        
+    if (typeof req.body.startTimeSec === "number") {
+        startTimeSec = req.body.startTimeSec;       
+    }
+    if (typeof req.body.maxTimeSec === "number") {
+        maxTimeSec = req.body.maxTimeSec;       
+    }
+    if (typeof req.body.running === "boolean") {
+        running = req.body.running;       
+    }   
     try {
-        var clock = Game.updatePeriodClock(null, null);        
+        var clock = Game.updatePeriodClock(startTimeSec, maxTimeSec, running);        
     }
     catch(err) {
         res.status(500).json({errors:"Server error PUT /game/clock"});         
@@ -104,7 +121,7 @@ router.put('/clock', function (req, res) {
 // Stops the clock
 router.delete('/clock', function (req, res) {
     try {
-        var clock = Game.stopPeriodClock();       
+        var clock = Game.updatePeriodClock(null, null, false);       
     }
     catch(err) {
         res.status(500).json({errors:"Server error DELETE /game/clock"});         

@@ -6,78 +6,171 @@ class VariableClass {
     }
 }
 
+class ScoreClass {
+    constructor() {
+        this.goals  = new VariableClass(0);
+        this.points = new VariableClass(0);
+    }
+    
+    get() {
+        return {
+            goals   : this.goals.value,
+            points  : this.points.value           
+        };
+    }
+}
+
 class TeamClass {
     constructor(name, colour) {
         this.name   = new VariableClass(name);
         this.colour = new VariableClass(colour);
-        this.goals  = new VariableClass(0);
-        this.points = new VariableClass(0);
+        this.score  = new ScoreClass();
+    } 
+    
+    get() {
+        return {
+            name    : this.name.value,
+            colour  : this.colour.value,
+            score   : this.score.get()
+        };
     }
 }
 
 class ClockClass {
-    constructor() {
-        this.time = new VariableClass(0);
-        this.maxTime = new VariableClass(1800);
+    constructor(startTime, endTime, allowOverrun) {
+        this.running        = false;
+        this.time           = startTime;
+        this.endTime        = endTime;
+        this.direction      = (startTime < endTime ? 1 : -1);
+        this.allowOverrun   = ( allowOverrun ? true : false );
+    }
+    
+    get() {
+        return {
+            allowOverrun : this.allowOverrun,
+            running      : this.running,
+            time         : this.time,
+            endTime      : this.endTime
+        };
+    }
+    
+    update(running, startTime, endTime, allowOverrun) {
+        if (typeof running === "boolean") {
+            this.running = running;
+        }
+        
+        if (typeof startTime === "number") {
+            this.startTime = startTime.toFixed(0) - 0;
+        }
+        
+        if (typeof endTime === "number") {
+            this.endTime = endTime.toFixed(0) - 0;
+            
+            if (typeof startTime === "number") {
+                this.direction = (startTime < endTime ? 1 : -1);
+            }
+        }
+        
+        if (typeof allowOverrun === "boolean") {
+            this.allowOverrun = allowOverrun
+        }       
+        
+        return this.get();    
+    }
+    
+    tick() { 
+        if ( this.running && ((this.endTime - this.time) * this.direction > 0) ) {
+            this.time = this.time + this.direction - 0;
+        }
+        
+        return this.time;
+    }
+}
+
+class ClockSchedulerClass {
+    constructor(ref) {
+        console.log("building scheduler");
+        console.log(ref.get());
     }
 }
 
 class GameClass {
     constructor() {
         this.resetGame();
+        this.clockScheduler = new ClockSchedulerClass(this);
     }
     
-    getState() {
+    get() {
         return {
             teams : {
-                home : {
-                    name   : this.homeTeam.name.value,
-                    colour : this.homeTeam.colour.value,
-                    goals  : this.homeTeam.goals.value,
-                    points : this.homeTeam.points.value
-                },
-                away : {
-                    name   : this.awayTeam.name.value,
-                    colour : this.awayTeam.colour.value,
-                    goals  : this.awayTeam.goals.value,
-                    points : this.awayTeam.points.value
-                },
+                home : this.teams.home.get(),
+                away : this.teams.away.get()
             },
             clocks : {
-                period : this.periodClock.time.value   
-            }         
+                period    : this.clocks.period.get(),
+                countdown : this.clocks.countdown.get()
+            },
+            state: this.state
         }
     }
       
     resetGame(homeTeamName, homeTeamColour, awayTeamName, awayTeamColour) {
-        this.homeTeam       = new TeamClass(homeTeamName, homeTeamColour);
-        this.awayTeam       = new TeamClass(awayTeamName, awayTeamColour);
-        this.periodClock    = new ClockClass();
+        this.teams = {
+            home        : new TeamClass(homeTeamName, homeTeamColour),
+            away        : new TeamClass(awayTeamName, awayTeamColour)
+        }
+        
+        this.clocks = {
+            period      : new ClockClass(),
+            countdown   : new ClockClass()
+        }
+        
         this.clockInterval  = null;
         this.state          = "reset";
-        return this.getState();
+        return this.get();
     }
     
     updateGame(homeTeamName, homeTeamColour, awayTeamName, awayTeamColour) {
         var retVal = null;
         
         if (homeTeamName != null) {
-            this.homeTeam.name.value    = homeTeamName;
+            this.teams.home.name.value    = homeTeamName;
         }
         if (homeTeamColour != null) {
-            this.homeTeam.colour.value  = homeTeamColour;
+            this.teams.home.colour.value  = homeTeamColour;
         }
         if (awayTeamName != null) {
-            this.awayTeam.name.value    = awayTeamName;
+            this.teams.away.name.value    = awayTeamName;
         }
         if (awayTeamColour != null) {
-            this.awayTeam.colour.value  = awayTeamColour;
+            this.teams.away.colour.value  = awayTeamColour;
         }
     }
         
     resetPeriodClock(startValueSec, maxValueSec) {
-        if (this.clockInterval != null) {
-            clearInterval(this.clockInterval);
+        
+        this.updatePeriodClock(startValueSec, maxValueSec, false);
+        
+        if(typeof startValueSec !== "number") {
+            this.periodClock.time.value = 0;            
+        }        
+        
+        return { clocks : {period : this.periodClock.time.value} };        
+    }
+     
+    updatePeriodClock(startValueSec, maxValueSec, running) {        
+        if (running !== null) {
+            if (this.clockInterval !== null) {
+                clearInterval(this.clockInterval);
+            }
+            
+            if (running) {
+                this.clockInterval = setInterval( (function(self){
+                    return function () {
+                        self.periodClock.time.value = self.periodClock.time.value + 1;
+                    }
+                })(this), 1000);                
+            }            
         }
         
         if(typeof maxValueSec === "number") {
@@ -86,32 +179,9 @@ class GameClass {
         
         if(typeof startValueSec === "number") {
             this.periodClock.time.value = startValueSec.toFixed(0) - 0;
-        } else {
-            this.periodClock.time.value = 0;            
-        }        
+        } 
         
-        return { clock : {period : this.periodClock.time.value} };        
-    }
-     
-    updatePeriodClock(currentValueSec, running) {        
-        if (this.clockInterval != null) {
-            clearInterval(this.clockInterval);
-        }
-      
-        this.clockInterval = setInterval( (function(self){
-            return function () {
-                self.periodClock.time.value = self.periodClock.time.value + 1;
-            }
-        })(this), 1000);
-        
-        return { clock : { period: this.periodClock.time.value } };
-    }
-  
-    stopPeriodClock() {
-        if (this.clockInterval != null) {
-            clearInterval(this.clockInterval);
-        }
-        return this.periodClock.time.value;
+        return { clocks : { period: this.periodClock.time.value } };
     }
     
     getScore(team) {
@@ -133,17 +203,11 @@ class GameClass {
         } // if typeof
         
         if (flagReturnHome) {
-            retVal["teams"]["home"] = {
-                "goals" : this.homeTeam.goals.value,
-                "points": this.homeTeam.points.value
-            };
+            retVal["teams"]["home"] = { score: this.teams.home.score.get() };
         }
         
         if (flagReturnAway) {
-            retVal["teams"]["away"] = {
-                "goals" : this.awayTeam.goals.value,
-                "points": this.awayTeam.points.value
-            };
+            retVal["teams"]["away"] = { score: this.teams.away.score.get() };
         }
         
         return retVal;
@@ -154,10 +218,10 @@ class GameClass {
             if(typeof team === "string") {
                 switch (team.toLowerCase()) {
                     case "home":
-                                    var teamPtr = this.homeTeam;
+                                    var teamPtr = this.teams.home;
                                     break;
                     case "away":
-                                    var teamPtr = this.awayTeam;
+                                    var teamPtr = this.teams.away;
                                     break;
                     default:
                                     return null;
@@ -170,10 +234,10 @@ class GameClass {
             if(typeof scoreType === "string") {
                 switch (scoreType.toLowerCase()) {
                     case "goals":
-                                    var scorePtr = teamPtr.goals;
+                                    var scorePtr = teamPtr.score.goals;
                                     break;
                     case "points":
-                                    var scorePtr = teamPtr.points;
+                                    var scorePtr = teamPtr.score.points;
                                     break;
                     default:
                                     return null;
@@ -200,10 +264,7 @@ class GameClass {
                 }
                 
                 var retVal = { teams:{} };
-                retVal["teams"][team] = {
-                    goals  : teamPtr.goals.value,
-                    points : teamPtr.points.value                            
-                }
+                retVal["teams"][team] = { score: teamPtr.score.get() };
                 
                 return retVal;
                 
