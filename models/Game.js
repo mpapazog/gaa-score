@@ -1,55 +1,68 @@
 // Game.js
 
-class VariableClass {
-    constructor(value) {
-        this.value = (typeof value !== "undefined" ? value : null);
-    }
-}
+const EventEmitter = require('events');
 
-class ScoreClass {
+var SELF = null;
+var TIMEOUT = null;
+
+class Score {
     constructor() {
-        this.goals  = new VariableClass(0);
-        this.points = new VariableClass(0);
+        this.goals  = 0;
+        this.points = 0;
     }
     
     get() {
         return {
-            goals   : this.goals.value,
-            points  : this.points.value           
+            goals   : this.goals,
+            points  : this.points           
         };
     }
 }
 
-class TeamClass {
+class Team {
     constructor(name, colour) {
-        this.name   = new VariableClass(name);
-        this.colour = new VariableClass(colour);
-        this.score  = new ScoreClass();
+        this.name   = name;
+        this.colour = colour;
+        this.score  = new Score();
     } 
     
-    get() {
+    getInfo() {
         return {
-            name    : this.name.value,
-            colour  : this.colour.value,
-            score   : this.score.get()
+            name    : this.name,
+            colour  : this.colour
         };
-    }
+    }    
+    
+    updateInfo(name, colour) {
+        var retVal = null;
+        
+        if (name != null) {
+            this.name   = name;
+        }
+        if (colour != null) {
+            this.colour = colour;
+        }
+    }    
 }
 
-class ClockClass {
-    constructor(startTime, endTime, allowOverrun) {
+class Clock {
+    constructor(id, startTime, endTime, allowOverrun) {
+        this.id             = id;
         this.running        = false;
+        this.startTime      = startTime;
         this.time           = startTime;
         this.endTime        = endTime;
         this.direction      = (startTime < endTime ? 1 : -1);
-        this.allowOverrun   = ( allowOverrun ? true : false );
+        this.allowOverrun   = (allowOverrun ? true : false);
     }
     
     get() {
         return {
+            id           : this.id,
             allowOverrun : this.allowOverrun,
             running      : this.running,
             time         : this.time,
+            startTime    : this.startTime,
             endTime      : this.endTime
         };
     }
@@ -60,7 +73,7 @@ class ClockClass {
         }
         
         if (typeof startTime === "number") {
-            this.startTime = startTime.toFixed(0) - 0;
+            this.time = startTime.toFixed(0) - 0;
         }
         
         if (typeof endTime === "number") {
@@ -69,218 +82,195 @@ class ClockClass {
             if (typeof startTime === "number") {
                 this.direction = (startTime < endTime ? 1 : -1);
             }
+            
         }
         
         if (typeof allowOverrun === "boolean") {
-            this.allowOverrun = allowOverrun
+            this.allowOverrun = allowOverrun;
         }       
         
         return this.get();    
     }
     
     tick() { 
-        if ( this.running && ((this.endTime - this.time) * this.direction > 0) ) {
+        if ( this.running && ( ((this.endTime - this.time) * this.direction > 0) || this.allowOverrun ) ) {
             this.time = this.time + this.direction - 0;
+            return true;
+        }
+        // TODO: 
+        //  * Disable countdown clock that ticks to zero 
+        //  * Disable count up clock that reaches max time and dows not allow overrun
+        
+        return false;
+    }
+}
+
+
+class Game extends EventEmitter {
+    
+    clockLoopStep(self) {
+        var dt = Date.now() - self.expected; // the drift (positive for overshooting)
+        if (dt > self.interval) {
+            // something really bad happened. Maybe the browser (tab) was inactive?
+            // possibly special handling to avoid futile "catch up" run
+            console.log("WARNING clockLoopStep: dt > interval")
         }
         
-        return this.time;
-    }
-}
+        // step code
+        if (self.clocks.period.tick()) {
+            self.emit('clockTimeUpdated', {id: 'period', field: 'time', value:self.clocks.period.time});
+        }
+            
+        if (self.clocks.countdown.tick()) {
+            self.emit('clockTimeUpdated', {id: 'countdown', field: 'time', value:self.clocks.countdown.time});
+        }
+        
+        self.emit('clockLoopTick');
 
-class ClockSchedulerClass {
-    constructor(ref) {
-        console.log("building scheduler");
-        console.log(ref.get());
+        self.expected += self.interval;
+        setTimeout(function () { self.clockLoopStep(self) }, Math.max(0, self.interval - dt)); // take into account drift
     }
-}
-
-class GameClass {
+    
     constructor() {
+        super();
         this.resetGame();
-        this.clockScheduler = new ClockSchedulerClass(this);
+        
+        // vars to compensate for clock drift
+        this.interval = 1000; // ms
+        this.expected = Date.now() + this.interval;
+        
+        SELF = this;
+        
+        setTimeout(function () { SELF.clockLoopStep(SELF); }, SELF.interval); 
     }
     
     get() {
         return {
-            teams : {
-                home : this.teams.home.get(),
-                away : this.teams.away.get()
+            state: this.state,
+            teamInfo : {
+                home : this.teams.home.getInfo(),
+                away : this.teams.away.getInfo()
             },
-            clocks : {
+            score : {
+                home : this.teams.home.score.get(),
+                away : this.teams.away.score.get()
+            },
+            clock : {
                 period    : this.clocks.period.get(),
                 countdown : this.clocks.countdown.get()
             },
-            state: this.state
+            periodNumber : this.periodNumber,
+            lastUpdated: null
         }
     }
       
-    resetGame(homeTeamName, homeTeamColour, awayTeamName, awayTeamColour) {
+    resetGame(homeTeamName, homeTeamColour, awayTeamName, awayTeamColour, periodLengthSec, halftimeLengthSec) {
+        SELF = null;
+        TIMEOUT = null;
+        
         this.teams = {
-            home        : new TeamClass(homeTeamName, homeTeamColour),
-            away        : new TeamClass(awayTeamName, awayTeamColour)
+            home        : new Team(homeTeamName, homeTeamColour),
+            away        : new Team(awayTeamName, awayTeamColour)
+        }
+        
+        var p = 1800;
+        if (typeof periodLengthSec === "number") {
+            p = periodLengthSec;
+        }
+        
+        var c = 600;
+        if (typeof halftimeLengthSec === "number") {
+            c = halftimeLengthSec;
         }
         
         this.clocks = {
-            period      : new ClockClass(),
-            countdown   : new ClockClass()
+            period      : new Clock('period', 0, p, true),
+            countdown   : new Clock('countdown', c, 0, false)
         }
         
-        this.clockInterval  = null;
-        this.state          = "reset";
-        return this.get();
+        this.state          = 'reset';
+        this.periodNumber   = 1;
+        this.emit('gameReset', this.get());
+    }
+       
+    updateScore(team, type, value) {
+        // TODO: Check if value has changed and update timestamp
+        this.teams[team].score[type] = value;
+        this.emit('scoreUpdated');
     }
     
-    updateGame(homeTeamName, homeTeamColour, awayTeamName, awayTeamColour) {
-        var retVal = null;
-        
-        if (homeTeamName != null) {
-            this.teams.home.name.value    = homeTeamName;
-        }
-        if (homeTeamColour != null) {
-            this.teams.home.colour.value  = homeTeamColour;
-        }
-        if (awayTeamName != null) {
-            this.teams.away.name.value    = awayTeamName;
-        }
-        if (awayTeamColour != null) {
-            this.teams.away.colour.value  = awayTeamColour;
-        }
-    }
-        
-    resetPeriodClock(startValueSec, maxValueSec) {
-        
-        this.updatePeriodClock(startValueSec, maxValueSec, false);
-        
-        if(typeof startValueSec !== "number") {
-            this.periodClock.time.value = 0;            
+    updatePeriodNumber(number) {
+        if ((number == 1 || number == 2) && number != this.periodNumber ) {
+            this.periodNumber = number;
+            this.emit('periodNumberUpdated');
         }        
-        
-        return { clocks : {period : this.periodClock.time.value} };        
     }
-     
-    updatePeriodClock(startValueSec, maxValueSec, running) {        
-        if (running !== null) {
-            if (this.clockInterval !== null) {
-                clearInterval(this.clockInterval);
-            }
-            
-            if (running) {
-                this.clockInterval = setInterval( (function(self){
-                    return function () {
-                        self.periodClock.time.value = self.periodClock.time.value + 1;
+    
+    updateState(state) {
+        switch (state) {
+            case 'halftime' :
+                this.clocks.countdown.time = this.clocks.countdown.startTime;
+                this.startClock('countdown');
+                this.state = 'halftime';
+                break;
+            case 'endgame':
+                this.stopClock('period');
+                this.stopClock('countdown');
+                this.state = 'endgame';
+                break;
+        }
+    }
+    
+    startClock(clock) {
+        switch (clock) {
+            case 'period':
+                if (!this.clocks.period.running) {
+                    this.clocks.period.running = true;
+                    if (this.clocks.countdown.running) {
+                        this.clocks.countdown.running = false;
+                        this.emit('clockStop', {id:'countdown'});                
                     }
-                })(this), 1000);                
-            }            
-        }
-        
-        if(typeof maxValueSec === "number") {
-            this.periodClock.maxTime.value = maxValueSec.toFixed(0) - 0;
-        }
-        
-        if(typeof startValueSec === "number") {
-            this.periodClock.time.value = startValueSec.toFixed(0) - 0;
-        } 
-        
-        return { clocks : { period: this.periodClock.time.value } };
+                    if (this.state == 'halftime') {
+                        this.periodNumber = 2;
+                    }
+                    this.state = 'started';
+                    this.emit('clockStart', {id:'period'});                   
+                }
+                break;
+            case 'countdown':
+                if (!this.clocks.countdown.running) {
+                    this.clocks.countdown.running = true;
+                    if (this.clocks.period.running) {
+                        this.clocks.period.running = false;
+                        this.state = 'paused';
+                        this.emit('clockStop', {id:'period'});                
+                    }
+                    this.emit('clockStart', {id:'countdown'});     
+                }                
+                break;
+        }        
     }
     
-    getScore(team) {
-        var flagReturnHome = true,
-            flagReturnAway = true,
-            retVal = { teams:{} };
-        
-        if(typeof team === "string") {
-            switch (team.toLowerCase()) {
-                case "home":
-                                flagReturnAway = false;
-                                break;
-                case "away":
-                                flagReturnHome = false;
-                                break;
-                default:
-                                return null;
-            } // switch
-        } // if typeof
-        
-        if (flagReturnHome) {
-            retVal["teams"]["home"] = { score: this.teams.home.score.get() };
-        }
-        
-        if (flagReturnAway) {
-            retVal["teams"]["away"] = { score: this.teams.away.score.get() };
-        }
-        
-        return retVal;
-    } // getScore
-    
-    updateScore(team, scoreType, changeMethod, amount) {
-        if(typeof amount === "number") {
-            if(typeof team === "string") {
-                switch (team.toLowerCase()) {
-                    case "home":
-                                    var teamPtr = this.teams.home;
-                                    break;
-                    case "away":
-                                    var teamPtr = this.teams.away;
-                                    break;
-                    default:
-                                    return null;
-                } // switch
-            } // if typeof
-            else {
-                return null;
-            }
-            
-            if(typeof scoreType === "string") {
-                switch (scoreType.toLowerCase()) {
-                    case "goals":
-                                    var scorePtr = teamPtr.score.goals;
-                                    break;
-                    case "points":
-                                    var scorePtr = teamPtr.score.points;
-                                    break;
-                    default:
-                                    return null;
-                } // switch
-            } // if typeof
-            else {
-                return null;
-            }
-            
-            if(typeof changeMethod === "string") {
-                switch (changeMethod.toLowerCase()) {
-                    case "adjust":
-                                    var newValue = (scorePtr.value - 0) + (amount.toFixed(0) - 0);
-                                    break;
-                    case "set":
-                                    var newValue = amount.toFixed(0) - 0;
-                                    break;
-                    default:
-                                    return null;
-                } // switch
-                
-                if (newValue >= 0) {
-                    scorePtr.value = newValue - 0;
+    stopClock(clock) {
+        switch (clock) {
+            case 'period':
+                if (this.clocks.period.running) {
+                    this.clocks.period.running = false;
+                    this.state = 'paused';
+                    this.emit('clockStop', {id:'period'});
                 }
-                
-                var retVal = { teams:{} };
-                retVal["teams"][team] = { score: teamPtr.score.get() };
-                
-                return retVal;
-                
-            } // if typeof
-            else {
-                return null;
-            }
-        } // if typeof
-        else {
-            return null;
-        }
-        
+                break;
+            case 'countdown':
+                if (this.clocks.countdown.running) {
+                    this.clocks.countdown.running = false;
+                    this.emit('clockStop', {id:'countdown'});
+                }                
+                break;
+        }           
     }
   
-} // class GameClass 
+} // class Game 
 
-var Game = new GameClass();
+var game = new Game();
 
-module.exports = Game;
+module.exports = game;
