@@ -1,7 +1,7 @@
 # gaa-score
 Live stream scoreboard overlay for Gaelic sports, based on node.js.
 
-After installing node.js, copy this repository to a local directory, open a command line terminal to it, and run:
+After installing node.js, clone this repository to a local directory, open a command line terminal to it, and run:
 ```
 npm install
 node server.js
