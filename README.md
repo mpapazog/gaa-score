@@ -12,3 +12,4 @@ The operator view and stream overlay will be accessible at:
 http://127.0.0.1:8080/operator.html
 http://127.0.0.1:8080/overlay.html
 ```
+The system is pretty much at an MVP state. Some UI elements don't work.
